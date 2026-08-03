@@ -283,7 +283,7 @@
       <button class="close-x" id="closeScanBtn">×</button>
     </div>
     <div id="reader"></div>
-    <div class="scan-hint">本の裏表紙のバーコード(978から始まる13桁)にカメラを向けてください</div>
+    <div class="scan-hint">本の裏表紙のバーコード(978から始まる13桁)にカメラを向けてください<br>うまく読み取れない場合は、10〜15cm程度に近づけ、バーコードの横幅が枠内に収まるようにゆっくり前後させてください</div>
   </div>
 </div>
 
@@ -471,8 +471,19 @@ async function startScanner() {
   });
   try {
     await html5QrCode.start(
-      { facingMode: "environment" },
-      { fps: 10, qrbox: { width: 260, height: 140 } },
+      {
+        facingMode: "environment",
+        // iOS Safari/Chromeはこの指定がないと低解像度になりやすく、
+        // 1Dバーコード(ISBN)の認識精度が大きく落ちるため明示的に要求する
+        width: { ideal: 1920 },
+        height: { ideal: 1080 }
+      },
+      {
+        fps: 15,
+        // バーコードは横長なので、枠も横幅を広めに取る
+        qrbox: { width: 300, height: 150 },
+        disableFlip: false
+      },
       onScanSuccess,
       () => {} // 読み取り失敗は毎フレーム呼ばれるので無視
     );
