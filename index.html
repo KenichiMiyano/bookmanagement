@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>マイ本棚</title>
+<style>
+  :root {
+    --primary: #2b6cb0;
+    --primary-dark: #1a4971;
+    --bg: #f5f6f8;
+    --card: #ffffff;
+    --text: #1a1a1a;
+    --muted: #6b7280;
+    --done: #16a34a;
+    --danger: #dc2626;
+    --border: #e5e7eb;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding-bottom: 100px;
+  }
+  header {
+    position: sticky;
+    top: 0;
+    background: var(--primary);
+    color: #fff;
+    padding: 14px 16px;
+    font-size: 18px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    z-index: 10;
+  }
+  header .status {
+    font-size: 12px;
+    font-weight: 400;
+    opacity: 0.85;
+  }
+  main {
+    padding: 12px;
+    max-width: 640px;
+    margin: 0 auto;
+  }
+  h2.section-title {
+    font-size: 14px;
+    color: var(--muted);
+    margin: 18px 4px 8px;
+    font-weight: 600;
+  }
+  .empty {
+    color: var(--muted);
+    text-align: center;
+    padding: 24px;
+    font-size: 14px;
+  }
+  .book-card {
+    background: var(--card);
+    border-radius: 10px;
+    padding: 10px;
+    margin-bottom: 8px;
+    display: flex;
+    gap: 10px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+  }
+  .book-card.completed {
+    opacity: 0.65;
+  }
+  .book-thumb {
+    width: 48px;
+    height: 68px;
+    object-fit: cover;
+    border-radius: 4px;
+    background: var(--border);
+    flex-shrink: 0;
+  }
+  .book-info { flex: 1; min-width: 0; }
+  .book-title {
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.3;
+    word-break: break-word;
+  }
+  .book-card.completed .book-title { text-decoration: line-through; }
+  .book-meta {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+  .book-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .btn {
+    border: none;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .btn-done { background: #dcfce7; color: var(--done); }
+  .btn-undo { background: #e5e7eb; color: var(--text); }
+  .btn-del { background: #fee2e2; color: var(--danger); }
+
+  .fab {
+    position: fixed;
+    right: 20px;
+    bottom: 24px;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: var(--primary);
+    color: #fff;
+    border: none;
+    font-size: 26px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+    cursor: pointer;
+    z-index: 20;
+  }
+  .fab:active { background: var(--primary-dark); }
+
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    display: none;
+    align-items: flex-end;
+    justify-content: center;
+    z-index: 50;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-sheet {
+    background: #fff;
+    width: 100%;
+    max-width: 640px;
+    border-radius: 16px 16px 0 0;
+    padding: 16px;
+    max-height: 88vh;
+    overflow-y: auto;
+  }
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .modal-header h3 { margin: 0; font-size: 16px; }
+  .close-x {
+    background: none;
+    border: none;
+    font-size: 22px;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  #reader {
+    width: 100%;
+    border-radius: 10px;
+    overflow: hidden;
+    background: #000;
+    min-height: 260px;
+  }
+  .scan-hint {
+    font-size: 12px;
+    color: var(--muted);
+    text-align: center;
+    margin-top: 8px;
+  }
+  .confirm-card {
+    display: flex;
+    gap: 12px;
+    padding: 12px;
+    background: var(--bg);
+    border-radius: 10px;
+    margin-top: 10px;
+  }
+  .confirm-card img {
+    width: 64px;
+    height: 92px;
+    object-fit: cover;
+    border-radius: 4px;
+    background: var(--border);
+  }
+  .confirm-info { flex: 1; }
+  .confirm-info .t { font-weight: 700; font-size: 15px; margin-bottom: 4px; }
+  .confirm-info .m { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .modal-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 14px;
+  }
+  .btn-primary {
+    flex: 1;
+    background: var(--primary);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .btn-secondary {
+    flex: 1;
+    background: var(--border);
+    color: var(--text);
+    border: none;
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .manual-form label {
+    display: block;
+    font-size: 12px;
+    color: var(--muted);
+    margin: 10px 0 4px;
+  }
+  .manual-form input {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 14px;
+  }
+  .toast {
+    position: fixed;
+    bottom: 100px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1a1a1a;
+    color: #fff;
+    padding: 10px 16px;
+    border-radius: 20px;
+    font-size: 13px;
+    opacity: 0;
+    transition: opacity 0.25s;
+    z-index: 60;
+    pointer-events: none;
+    max-width: 90%;
+    text-align: center;
+  }
+  .toast.show { opacity: 1; }
+  .spinner {
+    border: 3px solid var(--border);
+    border-top: 3px solid var(--primary);
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    animation: spin 0.8s linear infinite;
+    margin: 20px auto;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<header>
+  <span>📚 マイ本棚</span>
+  <span class="status" id="statusLabel">接続中...</span>
+</header>
+
+<main>
+  <h2 class="section-title">読書中・未読 (<span id="unreadCount">0</span>)</h2>
+  <div id="unreadList"></div>
+
+  <h2 class="section-title">読了 (<span id="doneCount">0</span>)</h2>
+  <div id="doneList"></div>
+</main>
+
+<button class="fab" id="openScanBtn" title="バーコードをスキャン">📷</button>
+
+<!-- スキャンモーダル -->
+<div class="modal-overlay" id="scanModal">
+  <div class="modal-sheet">
+    <div class="modal-header">
+      <h3>ISBNバーコードをスキャン</h3>
+      <button class="close-x" id="closeScanBtn">×</button>
+    </div>
+    <div id="reader"></div>
+    <div class="scan-hint">本の裏表紙のバーコード(978から始まる13桁)にカメラを向けてください</div>
+  </div>
+</div>
+
+<!-- 確認モーダル -->
+<div class="modal-overlay" id="confirmModal">
+  <div class="modal-sheet">
+    <div class="modal-header">
+      <h3 id="confirmTitle">書籍情報を確認</h3>
+      <button class="close-x" id="closeConfirmBtn">×</button>
+    </div>
+    <div id="confirmBody"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+  getAuth, signInAnonymously, onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {
+  getFirestore, collection, addDoc, doc, updateDoc, deleteDoc,
+  onSnapshot, query, orderBy, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+// ============================================================
+// ここをFirebaseコンソールで取得した値に置き換えてください
+// (プロジェクト設定 > 全般 > マイアプリ > SDK の設定と構成)
+// ============================================================
+const firebaseConfig = {
+  apiKey: "AIzaSyBfBWT65KipOn2lVOdyjSB6QjB0hP4FC94",
+  authDomain: "bookmanagement-2f82a.firebaseapp.com",
+  projectId: "bookmanagement-2f82a",
+  storageBucket: "bookmanagement-2f82a.firebasestorage.app",
+  messagingSenderId: "818136975058",
+  appId: "1:818136975058:web:b1b06584fc9055e32d8f0b"
+};
+// ============================================================
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const booksCol = collection(db, "books");
+
+const statusLabel = document.getElementById("statusLabel");
+const unreadList = document.getElementById("unreadList");
+const doneList = document.getElementById("doneList");
+const unreadCount = document.getElementById("unreadCount");
+const doneCount = document.getElementById("doneCount");
+const toastEl = document.getElementById("toast");
+
+let currentBooks = [];
+
+function showToast(msg) {
+  toastEl.textContent = msg;
+  toastEl.classList.add("show");
+  setTimeout(() => toastEl.classList.remove("show"), 2200);
+}
+
+function escapeHtml(str) {
+  if (!str) return "";
+  return str.replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[c]));
+}
+
+function renderBooks() {
+  const unread = currentBooks.filter(b => !b.completed);
+  const done = currentBooks.filter(b => b.completed);
+  unreadCount.textContent = unread.length;
+  doneCount.textContent = done.length;
+
+  unreadList.innerHTML = unread.length
+    ? unread.map(renderCard).join("")
+    : '<div class="empty">まだ本がありません。右下のカメラボタンから追加してください。</div>';
+
+  doneList.innerHTML = done.length
+    ? done.map(renderCard).join("")
+    : '<div class="empty">読了した本はまだありません。</div>';
+}
+
+function renderCard(b) {
+  const thumb = b.thumbnail
+    ? `<img class="book-thumb" src="${escapeHtml(b.thumbnail)}" alt="">`
+    : `<div class="book-thumb"></div>`;
+  const meta = [b.authors, b.publisher].filter(Boolean).join(" / ");
+  return `
+    <div class="book-card ${b.completed ? "completed" : ""}">
+      ${thumb}
+      <div class="book-info">
+        <div class="book-title">${escapeHtml(b.title || "(タイトル不明)")}</div>
+        <div class="book-meta">${escapeHtml(meta)}</div>
+        <div class="book-meta">ISBN: ${escapeHtml(b.isbn)}</div>
+        <div class="book-actions">
+          ${b.completed
+            ? `<button class="btn btn-undo" data-action="undo" data-id="${b.id}">未読に戻す</button>`
+            : `<button class="btn btn-done" data-action="done" data-id="${b.id}">読了にする</button>`}
+          <button class="btn btn-del" data-action="del" data-id="${b.id}">削除</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+document.addEventListener("click", async (e) => {
+  const btn = e.target.closest("button[data-action]");
+  if (!btn) return;
+  const id = btn.dataset.id;
+  const action = btn.dataset.action;
+  try {
+    if (action === "done") {
+      await updateDoc(doc(db, "books", id), { completed: true, completedAt: serverTimestamp() });
+    } else if (action === "undo") {
+      await updateDoc(doc(db, "books", id), { completed: false, completedAt: null });
+    } else if (action === "del") {
+      if (confirm("この本を削除しますか？")) {
+        await deleteDoc(doc(db, "books", id));
+      }
+    }
+  } catch (err) {
+    console.error(err);
+    showToast("更新に失敗しました: " + err.message);
+  }
+});
+
+// --- 認証 & Firestore購読 ---
+onAuthStateChanged(auth, (user) => {
+  if (user) {
+    statusLabel.textContent = "同期中";
+    const q = query(booksCol, orderBy("addedAt", "desc"));
+    onSnapshot(q, (snap) => {
+      currentBooks = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderBooks();
+    }, (err) => {
+      console.error(err);
+      statusLabel.textContent = "接続エラー";
+      showToast("Firestoreへの接続に失敗しました。firebaseConfigを確認してください。");
+    });
+  } else {
+    statusLabel.textContent = "未接続";
+  }
+});
+signInAnonymously(auth).catch((err) => {
+  console.error(err);
+  statusLabel.textContent = "認証エラー";
+  showToast("匿名認証に失敗しました。Firebaseコンソールで有効化してください。");
+});
+
+// ============================================================
+// カメラスキャン (html5-qrcode)
+// ============================================================
+const scanModal = document.getElementById("scanModal");
+const confirmModal = document.getElementById("confirmModal");
+const openScanBtn = document.getElementById("openScanBtn");
+const closeScanBtn = document.getElementById("closeScanBtn");
+const closeConfirmBtn = document.getElementById("closeConfirmBtn");
+const confirmBody = document.getElementById("confirmBody");
+
+let html5QrCode = null;
+let scanning = false;
+
+openScanBtn.addEventListener("click", async () => {
+  scanModal.classList.add("open");
+  await startScanner();
+});
+
+closeScanBtn.addEventListener("click", async () => {
+  await stopScanner();
+  scanModal.classList.remove("open");
+});
+
+closeConfirmBtn.addEventListener("click", () => {
+  confirmModal.classList.remove("open");
+});
+
+async function startScanner() {
+  if (scanning) return;
+  if (typeof Html5Qrcode === "undefined") {
+    showToast("バーコード読み取りライブラリの読み込みに失敗しました。通信環境を確認してください。");
+    return;
+  }
+  html5QrCode = new Html5Qrcode("reader", {
+    formatsToSupport: [Html5QrcodeSupportedFormats.EAN_13],
+    verbose: false
+  });
+  try {
+    await html5QrCode.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: { width: 260, height: 140 } },
+      onScanSuccess,
+      () => {} // 読み取り失敗は毎フレーム呼ばれるので無視
+    );
+    scanning = true;
+  } catch (err) {
+    console.error(err);
+    showToast("カメラを起動できませんでした。ブラウザのカメラ権限を確認してください。");
+  }
+}
+
+async function stopScanner() {
+  if (html5QrCode && scanning) {
+    try {
+      await html5QrCode.stop();
+      html5QrCode.clear();
+    } catch (e) { /* noop */ }
+  }
+  scanning = false;
+}
+
+async function onScanSuccess(decodedText) {
+  const isbn = decodedText.replace(/[^0-9]/g, "");
+  if (isbn.length !== 13) return; // ISBN-13以外は無視
+  await stopScanner();
+  scanModal.classList.remove("open");
+  showConfirmLoading(isbn);
+  const book = await lookupBook(isbn);
+  if (book) {
+    showConfirmFound(book);
+  } else {
+    showConfirmNotFound(isbn);
+  }
+}
+
+function showConfirmLoading(isbn) {
+  document.getElementById("confirmTitle").textContent = "書籍情報を検索中...";
+  confirmBody.innerHTML = `<div class="spinner"></div><div class="scan-hint">ISBN: ${escapeHtml(isbn)}</div>`;
+  confirmModal.classList.add("open");
+}
+
+function showConfirmFound(book) {
+  const already = currentBooks.some(b => b.isbn === book.isbn);
+  document.getElementById("confirmTitle").textContent = "この本を追加しますか？";
+  confirmBody.innerHTML = `
+    <div class="confirm-card">
+      ${book.thumbnail ? `<img src="${escapeHtml(book.thumbnail)}">` : `<div style="width:64px;height:92px;background:#e5e7eb;border-radius:4px;"></div>`}
+      <div class="confirm-info">
+        <div class="t">${escapeHtml(book.title)}</div>
+        <div class="m">${escapeHtml(book.authors || "著者不明")}</div>
+        <div class="m">${escapeHtml(book.publisher || "")}</div>
+        <div class="m">ISBN: ${escapeHtml(book.isbn)}</div>
+        ${already ? '<div class="m" style="color:#dc2626;margin-top:6px;">※ 既に登録済みです</div>' : ""}
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="cancelAddBtn">キャンセル</button>
+      <button class="btn-primary" id="confirmAddBtn">${already ? "それでも追加する" : "登録する"}</button>
+    </div>
+  `;
+  document.getElementById("cancelAddBtn").addEventListener("click", () => {
+    confirmModal.classList.remove("open");
+  });
+  document.getElementById("confirmAddBtn").addEventListener("click", async () => {
+    await saveBook(book);
+    confirmModal.classList.remove("open");
+  });
+}
+
+function showConfirmNotFound(isbn) {
+  document.getElementById("confirmTitle").textContent = "書籍が見つかりませんでした";
+  confirmBody.innerHTML = `
+    <div class="scan-hint">ISBN: ${escapeHtml(isbn)} の情報が公開DBに見つかりませんでした。手動で入力して登録できます。</div>
+    <div class="manual-form">
+      <label>タイトル *</label>
+      <input type="text" id="manTitle" placeholder="書籍タイトル">
+      <label>著者</label>
+      <input type="text" id="manAuthors" placeholder="著者名">
+      <label>出版社</label>
+      <input type="text" id="manPublisher" placeholder="出版社名">
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="cancelAddBtn">キャンセル</button>
+      <button class="btn-primary" id="confirmAddBtn">登録する</button>
+    </div>
+  `;
+  document.getElementById("cancelAddBtn").addEventListener("click", () => {
+    confirmModal.classList.remove("open");
+  });
+  document.getElementById("confirmAddBtn").addEventListener("click", async () => {
+    const title = document.getElementById("manTitle").value.trim();
+    if (!title) {
+      showToast("タイトルを入力してください");
+      return;
+    }
+    const book = {
+      isbn,
+      title,
+      authors: document.getElementById("manAuthors").value.trim(),
+      publisher: document.getElementById("manPublisher").value.trim(),
+      thumbnail: ""
+    };
+    await saveBook(book);
+    confirmModal.classList.remove("open");
+  });
+}
+
+async function saveBook(book) {
+  try {
+    await addDoc(booksCol, {
+      isbn: book.isbn,
+      title: book.title || "",
+      authors: book.authors || "",
+      publisher: book.publisher || "",
+      thumbnail: book.thumbnail || "",
+      completed: false,
+      completedAt: null,
+      addedAt: serverTimestamp()
+    });
+    showToast("本棚に追加しました");
+  } catch (err) {
+    console.error(err);
+    showToast("追加に失敗しました: " + err.message);
+  }
+}
+
+// --- 書籍情報取得: openBD -> Google Books の順にフォールバック ---
+async function lookupBook(isbn) {
+  const fromOpenBd = await lookupOpenBd(isbn);
+  if (fromOpenBd) return fromOpenBd;
+  const fromGoogle = await lookupGoogleBooks(isbn);
+  if (fromGoogle) return fromGoogle;
+  return null;
+}
+
+async function lookupOpenBd(isbn) {
+  try {
+    const res = await fetch(`https://api.openbd.jp/v1/get?isbn=${isbn}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const item = data && data[0];
+    if (!item || !item.summary) return null;
+    const s = item.summary;
+    return {
+      isbn,
+      title: s.title || "",
+      authors: s.author || "",
+      publisher: s.publisher || "",
+      thumbnail: s.cover || ""
+    };
+  } catch (e) {
+    console.error("openBD lookup failed", e);
+    return null;
+  }
+}
+
+async function lookupGoogleBooks(isbn) {
+  try {
+    const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const item = data && data.items && data.items[0];
+    if (!item || !item.volumeInfo) return null;
+    const v = item.volumeInfo;
+    return {
+      isbn,
+      title: v.title || "",
+      authors: (v.authors || []).join(", "),
+      publisher: v.publisher || "",
+      thumbnail: (v.imageLinks && (v.imageLinks.thumbnail || v.imageLinks.smallThumbnail)) || ""
+    };
+  } catch (e) {
+    console.error("Google Books lookup failed", e);
+    return null;
+  }
+}
+</script>
+
+<!-- バーコード読み取りライブラリ -->
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+</body>
+</html>
