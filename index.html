@@ -356,6 +356,15 @@
 <div class="toast" id="toast"></div>
 
 <script type="module">
+// --- デバッグ用: PC不要でスマホ上でもJSエラーを直接確認できるようにする ---
+window.addEventListener("error", (e) => {
+  alert("JSエラー: " + e.message + "\n(" + (e.filename || "").split("/").pop() + ":" + e.lineno + ")");
+});
+window.addEventListener("unhandledrejection", (e) => {
+  const reason = e.reason && e.reason.message ? e.reason.message : String(e.reason);
+  alert("非同期エラー: " + reason);
+});
+
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth, signInAnonymously, onAuthStateChanged
