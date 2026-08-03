@@ -124,35 +124,6 @@
     z-index: 20;
   }
   .fab:active { background: var(--primary-dark); }
-  .fab-secondary {
-    bottom: 94px;
-    width: 50px;
-    height: 50px;
-    font-size: 20px;
-    background: #4b5563;
-  }
-  .fab-secondary:active { background: #374151; }
-
-  .filter-bar {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin: 4px 4px 12px;
-  }
-  .filter-bar label {
-    font-size: 12px;
-    color: var(--muted);
-    white-space: nowrap;
-  }
-  .filter-bar select {
-    flex: 1;
-    padding: 8px 10px;
-    border-radius: 8px;
-    border: 1px solid var(--border);
-    font-size: 13px;
-    background: #fff;
-    color: var(--text);
-  }
 
   .modal-overlay {
     position: fixed;
@@ -295,13 +266,6 @@
 </header>
 
 <main>
-  <div class="filter-bar">
-    <label for="authorFilter">著者で絞り込み</label>
-    <select id="authorFilter">
-      <option value="">すべて表示</option>
-    </select>
-  </div>
-
   <h2 class="section-title">読書中・未読 (<span id="unreadCount">0</span>)</h2>
   <div id="unreadList"></div>
 
@@ -309,26 +273,7 @@
   <div id="doneList"></div>
 </main>
 
-<button class="fab fab-secondary" id="openManualBtn" title="ISBNを手入力">⌨️</button>
 <button class="fab" id="openScanBtn" title="バーコードをスキャン">📷</button>
-
-<!-- ISBN手入力モーダル -->
-<div class="modal-overlay" id="manualModal">
-  <div class="modal-sheet">
-    <div class="modal-header">
-      <h3>ISBNを手入力</h3>
-      <button class="close-x" id="closeManualBtn">×</button>
-    </div>
-    <div class="manual-form">
-      <label>ISBN(ハイフンありでも可)</label>
-      <input type="text" id="manualIsbnInput" placeholder="例: 978-4-87311-948-5" inputmode="numeric">
-    </div>
-    <div class="modal-actions">
-      <button class="btn-secondary" id="manualCancelBtn">キャンセル</button>
-      <button class="btn-primary" id="manualSearchBtn">検索する</button>
-    </div>
-  </div>
-</div>
 
 <!-- スキャンモーダル -->
 <div class="modal-overlay" id="scanModal">
@@ -338,7 +283,7 @@
       <button class="close-x" id="closeScanBtn">×</button>
     </div>
     <div id="reader"></div>
-    <div class="scan-hint">本の裏表紙のバーコード(978から始まる13桁)にカメラを向けてください<br>うまく読み取れない場合は、10〜15cm程度に近づけ、バーコードの横幅が枠内に収まるようにゆっくり前後させてください</div>
+    <div class="scan-hint">本の裏表紙のバーコード(978から始まる13桁)にカメラを向けてください</div>
   </div>
 </div>
 
@@ -356,15 +301,6 @@
 <div class="toast" id="toast"></div>
 
 <script type="module">
-// --- デバッグ用: PC不要でスマホ上でもJSエラーを直接確認できるようにする ---
-window.addEventListener("error", (e) => {
-  alert("JSエラー: " + e.message + "\n(" + (e.filename || "").split("/").pop() + ":" + e.lineno + ")");
-});
-window.addEventListener("unhandledrejection", (e) => {
-  const reason = e.reason && e.reason.message ? e.reason.message : String(e.reason);
-  alert("非同期エラー: " + reason);
-});
-
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth, signInAnonymously, onAuthStateChanged
@@ -401,8 +337,6 @@ const doneCount = document.getElementById("doneCount");
 const toastEl = document.getElementById("toast");
 
 let currentBooks = [];
-let selectedAuthor = "";
-const authorFilterEl = document.getElementById("authorFilter");
 
 function showToast(msg) {
   toastEl.textContent = msg;
@@ -417,43 +351,9 @@ function escapeHtml(str) {
   }[c]));
 }
 
-// 著者欄には "author, author2" や "author1/author2" のように
-// 複数人が区切り文字でまとまって入っていることがあるため分割する
-function extractAuthors(authorsStr) {
-  if (!authorsStr) return [];
-  return authorsStr.split(/[,\/、;；]+/).map(s => s.trim()).filter(Boolean);
-}
-
-function updateAuthorFilterOptions() {
-  const authorSet = new Set();
-  currentBooks.forEach(b => extractAuthors(b.authors).forEach(a => authorSet.add(a)));
-  const authors = Array.from(authorSet).sort((a, b) => a.localeCompare(b, "ja"));
-
-  authorFilterEl.innerHTML = '<option value="">すべて表示</option>' +
-    authors.map(a => `<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join("");
-
-  if (authors.includes(selectedAuthor)) {
-    authorFilterEl.value = selectedAuthor;
-  } else {
-    selectedAuthor = "";
-    authorFilterEl.value = "";
-  }
-}
-
-authorFilterEl.addEventListener("change", (e) => {
-  selectedAuthor = e.target.value;
-  renderBooks();
-});
-
 function renderBooks() {
-  updateAuthorFilterOptions();
-
-  const filtered = selectedAuthor
-    ? currentBooks.filter(b => extractAuthors(b.authors).includes(selectedAuthor))
-    : currentBooks;
-
-  const unread = filtered.filter(b => !b.completed);
-  const done = filtered.filter(b => b.completed);
+  const unread = currentBooks.filter(b => !b.completed);
+  const done = currentBooks.filter(b => b.completed);
   unreadCount.textContent = unread.length;
   doneCount.textContent = done.length;
 
@@ -571,19 +471,8 @@ async function startScanner() {
   });
   try {
     await html5QrCode.start(
-      {
-        facingMode: "environment",
-        // iOS Safari/Chromeはこの指定がないと低解像度になりやすく、
-        // 1Dバーコード(ISBN)の認識精度が大きく落ちるため明示的に要求する
-        width: { ideal: 1920 },
-        height: { ideal: 1080 }
-      },
-      {
-        fps: 15,
-        // バーコードは横長なので、枠も横幅を広めに取る
-        qrbox: { width: 300, height: 150 },
-        disableFlip: false
-      },
+      { facingMode: "environment" },
+      { fps: 10, qrbox: { width: 260, height: 140 } },
       onScanSuccess,
       () => {} // 読み取り失敗は毎フレーム呼ばれるので無視
     );
@@ -609,10 +498,6 @@ async function onScanSuccess(decodedText) {
   if (isbn.length !== 13) return; // ISBN-13以外は無視
   await stopScanner();
   scanModal.classList.remove("open");
-  await handleIsbnLookup(isbn);
-}
-
-async function handleIsbnLookup(isbn) {
   showConfirmLoading(isbn);
   const book = await lookupBook(isbn);
   if (book) {
@@ -621,61 +506,6 @@ async function handleIsbnLookup(isbn) {
     showConfirmNotFound(isbn);
   }
 }
-
-// ISBN-10のチェックディジットを再計算してISBN-13に変換
-function isbn10to13(isbn9digits) {
-  const core = "978" + isbn9digits;
-  let sum = 0;
-  for (let i = 0; i < 12; i++) {
-    sum += parseInt(core[i], 10) * (i % 2 === 0 ? 1 : 3);
-  }
-  const check = (10 - (sum % 10)) % 10;
-  return core + String(check);
-}
-
-// ハイフン・スペース・全角記号などが混ざった入力からISBN-13を抽出する
-// 10桁(旧ISBN、末尾X可)の場合は13桁に変換する
-function parseIsbnInput(raw) {
-  if (!raw) return null;
-  let cleaned = raw.trim().toUpperCase().replace(/[^0-9X]/g, "");
-  if (/^[0-9]{13}$/.test(cleaned)) {
-    return cleaned;
-  }
-  if (/^[0-9]{9}[0-9X]$/.test(cleaned)) {
-    return isbn10to13(cleaned.slice(0, 9));
-  }
-  return null;
-}
-
-// --- ISBN手入力 ---
-const manualModal = document.getElementById("manualModal");
-const openManualBtn = document.getElementById("openManualBtn");
-const closeManualBtn = document.getElementById("closeManualBtn");
-const manualCancelBtn = document.getElementById("manualCancelBtn");
-const manualSearchBtn = document.getElementById("manualSearchBtn");
-const manualIsbnInput = document.getElementById("manualIsbnInput");
-
-openManualBtn.addEventListener("click", () => {
-  manualIsbnInput.value = "";
-  manualModal.classList.add("open");
-  setTimeout(() => manualIsbnInput.focus(), 100);
-});
-closeManualBtn.addEventListener("click", () => manualModal.classList.remove("open"));
-manualCancelBtn.addEventListener("click", () => manualModal.classList.remove("open"));
-
-async function submitManualIsbn() {
-  const isbn = parseIsbnInput(manualIsbnInput.value);
-  if (!isbn) {
-    showToast("13桁(ハイフン付き可)、または10桁のISBNを入力してください");
-    return;
-  }
-  manualModal.classList.remove("open");
-  await handleIsbnLookup(isbn);
-}
-manualSearchBtn.addEventListener("click", submitManualIsbn);
-manualIsbnInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") submitManualIsbn();
-});
 
 function showConfirmLoading(isbn) {
   document.getElementById("confirmTitle").textContent = "書籍情報を検索中...";
