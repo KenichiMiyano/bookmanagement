@@ -36,6 +36,40 @@
   header h1 {
     margin: 0; font-size: 18px; font-weight: 600;
   }
+  .title-row {
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .settings-btn {
+    background: rgba(255,255,255,0.15);
+    border: none;
+    color: #fff;
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    font-size: 16px;
+    cursor: pointer;
+  }
+  .settings-help {
+    font-size: 12px;
+    color: var(--sub);
+    line-height: 1.6;
+    margin-bottom: 12px;
+  }
+  .settings-help a {
+    color: var(--primary);
+  }
+  .settings-input {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    font-size: 14px;
+    margin-bottom: 6px;
+  }
+  .settings-note {
+    font-size: 11px;
+    color: var(--sub);
+    margin-bottom: 10px;
+  }
   .search-row {
     display: flex; gap: 8px; align-items: center;
   }
@@ -280,7 +314,10 @@
 <body>
 
 <header>
-  <h1>📚 本棚</h1>
+  <div class="title-row">
+    <h1>📚 本棚</h1>
+    <button class="settings-btn" id="settingsBtn" title="設定">⚙</button>
+  </div>
   <div class="search-row">
     <input id="authorSearch" type="text" placeholder="作家名で検索" autocomplete="off">
   </div>
@@ -314,6 +351,24 @@
   <div class="modal-box" id="confirmBox"></div>
 </div>
 
+<!-- Settings overlay -->
+<div class="overlay hidden" id="settingsOverlay">
+  <div class="modal-box">
+    <h2>設定</h2>
+    <div class="settings-help">
+      Google Books APIキー(任意)。openBDで見つからない場合のみ使用します。<br>
+      キー未設定でもopenBDのみで動作しますが、Google Booksへの照会は匿名アクセスが1日あたりの上限が0件のため実質使えません。<br>
+      キーは <a href="https://console.cloud.google.com/apis/library/books.googleapis.com" target="_blank" rel="noopener">Google Cloud Console</a> で取得できます(無料枠あり)。
+    </div>
+    <input type="text" class="settings-input" id="apiKeyInput" placeholder="Google Books APIキーを入力">
+    <div class="settings-note">このキーはあなたの端末のブラウザ内(localStorage)にのみ保存され、外部やサーバーには送信されません。</div>
+    <div class="modal-btn-row">
+      <button class="btn-secondary" id="settingsCancel">閉じる</button>
+      <button class="btn-primary" id="settingsSave">保存</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast hidden" id="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js"></script>
@@ -322,6 +377,7 @@
   "use strict";
 
   var STORAGE_KEY = "bookshelf_books_v1";
+  var API_KEY_STORAGE = "bookshelf_google_books_api_key";
   var books = [];
   var currentFilter = "all";
   var codeReader = null;
@@ -335,6 +391,14 @@
   }
   function saveBooks(){
     localStorage.setItem(STORAGE_KEY, JSON.stringify(books));
+  }
+
+  function getApiKey(){
+    return (localStorage.getItem(API_KEY_STORAGE) || "").trim();
+  }
+  function setApiKey(key){
+    if (key) localStorage.setItem(API_KEY_STORAGE, key);
+    else localStorage.removeItem(API_KEY_STORAGE);
   }
 
   // ---------- 作家名の正規化 ----------
@@ -401,10 +465,15 @@
       .catch(function(){ return undefined; }); // undefined = 通信エラー
   }
 
+  // 戻り値: 見つかった={found:true,data}/ 見つからない=null / 通信エラー=undefined / キー未設定=false
   function fetchGoogleBooks(isbn){
-    return fetch("https://www.googleapis.com/books/v1/volumes?q=isbn:" + isbn)
+    var key = getApiKey();
+    if (!key) return Promise.resolve(false);
+    var url = "https://www.googleapis.com/books/v1/volumes?q=isbn:" + isbn + "&key=" + encodeURIComponent(key);
+    return fetch(url)
       .then(function(res){ return res.json(); })
       .then(function(data){
+        if (data && data.error) return undefined; // 429等のAPIエラー
         if (!data || !data.items || !data.items.length) return null;
         var info = data.items[0].volumeInfo || {};
         var authorsRaw = (info.authors || []).join(";");
@@ -422,18 +491,13 @@
   }
 
   function lookupBook(isbn){
-    return fetchOpenBD(isbn).then(function(result){
-      if (result) return { status: "found", data: result };
-      if (result === null){
-        return fetchGoogleBooks(isbn).then(function(gResult){
-          if (gResult) return { status: "found", data: gResult };
-          if (gResult === null) return { status: "notfound" };
-          return { status: "error" };
-        });
-      }
-      // openBD自体が通信エラー -> 念のためGoogleBooksも試す
+    return fetchOpenBD(isbn).then(function(openbdResult){
+      if (openbdResult) return { status: "found", data: openbdResult };
+      var openbdError = (openbdResult === undefined);
       return fetchGoogleBooks(isbn).then(function(gResult){
-        if (gResult) return { status: "found", data: gResult };
+        if (gResult && gResult !== true) return { status: "found", data: gResult };
+        if (gResult === false) return { status: openbdError ? "error" : "notfound_nokey" };
+        if (gResult === null) return { status: openbdError ? "error" : "notfound" };
         return { status: "error" };
       });
     });
@@ -589,6 +653,8 @@
         showConfirm(result.data);
       } else if (result.status === "notfound"){
         showNotFound(isbn);
+      } else if (result.status === "notfound_nokey"){
+        showNotFoundNoKey(isbn);
       } else {
         showError(isbn);
       }
@@ -659,6 +725,24 @@
     });
   }
 
+  function showNotFoundNoKey(isbn){
+    confirmOverlay.classList.remove("hidden");
+    confirmBox.innerHTML =
+      '<h2>見つかりませんでした</h2>' +
+      '<div class="notfound-msg">ISBN: ' + esc(isbn) + '<br>openBDには登録がありませんでした。Google BooksのAPIキーが未設定のため、そちらは照会していません。<br>設定画面でAPIキーを登録すると、Google Booksからも検索できます。</div>' +
+      '<div class="modal-btn-row">' +
+        '<button class="btn-secondary" id="nkClose">閉じる</button>' +
+        '<button class="btn-primary" id="nkSettings">設定を開く</button>' +
+      '</div>';
+    document.getElementById("nkClose").addEventListener("click", function(){
+      confirmOverlay.classList.add("hidden");
+    });
+    document.getElementById("nkSettings").addEventListener("click", function(){
+      confirmOverlay.classList.add("hidden");
+      openSettings();
+    });
+  }
+
   function showError(isbn){
     confirmOverlay.classList.remove("hidden");
     confirmBox.innerHTML =
@@ -676,6 +760,26 @@
       startScan();
     });
   }
+
+  // ---------- 設定 ----------
+  var settingsOverlay = document.getElementById("settingsOverlay");
+  var apiKeyInput = document.getElementById("apiKeyInput");
+
+  function openSettings(){
+    apiKeyInput.value = getApiKey();
+    settingsOverlay.classList.remove("hidden");
+  }
+  function closeSettings(){
+    settingsOverlay.classList.add("hidden");
+  }
+
+  document.getElementById("settingsBtn").addEventListener("click", openSettings);
+  document.getElementById("settingsCancel").addEventListener("click", closeSettings);
+  document.getElementById("settingsSave").addEventListener("click", function(){
+    setApiKey(apiKeyInput.value.trim());
+    closeSettings();
+    showToast("設定を保存しました");
+  });
 
   // ---------- 初期化 ----------
   books = loadBooks();
